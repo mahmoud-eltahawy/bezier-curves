@@ -1,4 +1,3 @@
-
 function box_size() {
     return Math.min(
 	    window.innerWidth,
@@ -7,67 +6,56 @@ function box_size() {
 }
 
 class Vec2 {
-	constructor({x,y}) {
-		this.x = x
-		this.y = y
-	}
-
-	transition({x,y}) {
-		return new Vec2({
-			x : this.x + x,
-			y : this.y + y
-		})
-	}
-
-	scale(scaler) {
-		return new Vec2({
-			x : this.x * scaler,
-			y : this.y * scaler,
-		})
-	}
-
-	rotate_z(angle) {
-		const cos = Math.cos(angle)
-		const sin = Math.sin(angle)
-		const x = this.x
-		const y = this.y
-		return new Vec2({
-			x : x * cos - y * sin,
-			y : x * sin + y * cos,
-		})
+	constructor({ x, y }) {
+		this.x = x; // world coordinate
+		this.y = y;
 	}
 
 	normalized() {
-		const half_size = box_size() / 2
+		const half = box_size() / 2;
+		return {
+			x: half * (1 + this.x / config.scale_x),
+			y: half * (1 - this.y / config.scale_y), // canvas Y increases downward
+		};
+	}
+
+	static fromCanvas({ x, y }) {
+		const half = box_size() / 2;
 		return new Vec2({
-			x : half_size * (1 + this.x / config.scale_x),
-			y : half_size * (1 - this.y / config.scale_y),
-		})
+			x: (x / half - 1) * config.scale_x,
+			y: (1 - y / half) * config.scale_y, // corrected formula
+		});
 	}
 
-	draw_line_to(other,width = 2, color = '#FFFFFF') {
-		const t = this.normalized()
-		const o = other.normalized()
-		ctx.strokeStyle = color
-		ctx.fillStyle = color
-		ctx.lineWidth = width
-		ctx.beginPath()
-		ctx.moveTo(t.x, t.y)
-		ctx.lineTo(o.x, o.y)
-		ctx.stroke()
+	distance_to(other) {
+		const dx = this.x - other.x;
+		const dy = this.y - other.y;
+		return Math.hypot(dx, dy);
 	}
 
-	draw(size = 10,color = "#00FF00") {
-		const {x,y} = this.normalized()
-		ctx.fillStyle = color 
-		ctx.fillRect(x - size/2,y - size/2,size,size)
-	}
-
-	lerp({x,y},t) {
+	lerp(other, t) {
 		return new Vec2({
-			x : lerp(this.x,x,t),
-			y : lerp(this.y,y,t),
-		})
+			x: lerp(this.x,other.x,t),
+			y: lerp(this.y,other.y,t)
+		});
+	}
+	
+	// Drawing methods (canvas context is global 'ctx')
+	draw(size = 10, color = "#00FF00") {
+		const { x, y } = this.normalized();
+		ctx.fillStyle = color;
+		ctx.fillRect(x - size / 2, y - size / 2, size, size);
+	}
+	
+	draw_line_to(other, width = 2, color = "#FFFFFF") {
+		const from = this.normalized();
+		const to = other.normalized();
+		ctx.strokeStyle = color;
+		ctx.lineWidth = width;
+		ctx.beginPath();
+		ctx.moveTo(from.x, from.y);
+		ctx.lineTo(to.x, to.y);
+		ctx.stroke();
 	}
 }
 

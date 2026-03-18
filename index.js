@@ -1,188 +1,148 @@
-const FPS = 30
-const DDT = 0.01
-const point_move_speed = 0.05;
-const ctx = box.getContext("2d")
-
+// ==================== Configuration ====================
+const FPS = 30;
+const DT_STEP = 0.01; // how much 't' increases per frame
 const config = {
-	scale_x : 10,
-	scale_y : 10,
-}
+scale_x: 10,
+scale_y: 10,
+};
+
+// ==================== Canvas Setup ====================
+const canvas = document.getElementById("box");
+const ctx = canvas.getContext("2d");
 
 function box_size() {
-	return Math.min(window.innerWidth,window.innerHeight) - 50
+return Math.min(window.innerWidth, window.innerHeight) - 50; // margin
 }
 
-function resize() {
-	const size = box_size()
-	box.width = size
-	box.height = size
-	clear_background()
+function resizeCanvas() {
+const size = box_size();
+canvas.width = size;
+canvas.height = size;
+clearBackground();
 }
-resize()
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
-addEventListener("resize",resize)
-
-function clear_background() {
-	const size = box_size()
-	ctx.fillStyle = "#000000"
-	ctx.fillRect(0,0,size,size)
-}
-clear_background()
-
-function draw_point({x,y},size = 10) {
-	ctx.fillStyle = "#00FF00"
-	ctx.fillRect(x,y,size,size)
+function clearBackground() {
+ctx.fillStyle = "#000000";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+// ==================== Mouse Interaction ====================
+let mouse = undefined;           // { point: Vec2, index: number } of hovered control point
+let mouseDown = false;
 
-let dt = 0;
-const dis = 8
-const start_points = [
-	new Vec2({x : -dis,y : dis}),
-	new Vec2({x : -dis,y : -dis}),
-	new Vec2({x : dis,y : -dis}),
-	new Vec2({x : dis,y : dis}),
-]
+canvas.addEventListener("mousedown", () => {
+mouseDown = true;
+});
+canvas.addEventListener("mouseup", () => {
+mouseDown = false;
+});
+canvas.addEventListener("mousemove", (e) => {
+const rect = canvas.getBoundingClientRect();
+const canvasX = e.clientX - rect.left;
+const canvasY = e.clientY - rect.top; // fixed: was 'rect.right'
 
-let points = []
+const worldPos = Vec2.fromCanvas({ x: canvasX, y: canvasY });
 
-function linestrip(points,width = 2,color = "#FFFFFF") {
-	for (let i=0; i< points.length -1; i++) {
-		let first = points[i]
-		let second = points[i+1]
-		first.draw_line_to(second,width,color)
+// Find control point within 0.4 world units
+const hovered = start_points
+.map((pt, idx) => ({ point: pt, index: idx }))
+.filter(item => worldPos.distance_to(item.point) < 0.4)
+.at(0);
+
+mouse = hovered ? { ...hovered, worldPos } : undefined;
+});
+
+// ==================== Control Points & State ====================
+const HALF_SPAN = 8;
+let start_points = [
+new Vec2({ x: -HALF_SPAN, y:  HALF_SPAN }),
+new Vec2({ x: -HALF_SPAN, y: -HALF_SPAN }),
+new Vec2({ x:  HALF_SPAN, y: -HALF_SPAN }),
+new Vec2({ x:  HALF_SPAN, y:  HALF_SPAN }),
+];
+
+let dt = 0;                       // current interpolation parameter [0,1]
+let curvePoints = [];             // accumulated curve points (red line)
+
+// ==================== De Casteljau ====================
+// Returns an array of levels: [level0, level1, ..., lastLevel]
+function deCasteljauLevels(points, t, levels = []) {
+	if (points.length === 0) return levels;
+	if (levels.length === 0) levels.push(points); // store original as level 0
+	
+	if (points.length === 1) return levels; // reached the curve point
+	
+	const nextLevel = [];
+	for (let i = 0; i < points.length - 1; i++) {
+		nextLevel.push(points[i].lerp(points[i + 1], t));
 	}
+	levels.push(nextLevel);
+	return deCasteljauLevels(nextLevel, t, levels);
 }
 
-let move_point = null
-
-function all_levels_points(points,t,acc = [start_points]) {
-	if (points.length <= 1) {
-		return [points]
-	}
-	const res = []
-	for (let i = 0; i<points.length -1; i++) {
-		const p = points[i].lerp(points[i + 1],t) 
-		res.push(p)
-	}
-	acc.push(res)
-	if (res.length === 1) {
-		return acc
-	} else {
-		return all_levels_points(res,t,acc)
-	}
-}
-
-function main_loop() {
-	clear_background()
-
-	const alp = all_levels_points(start_points,dt)
-
-	for (let i = 0;i <alp.length;i++) {
-		const level = alp[i]
-		for (let j = 0;j<level.length;j++) {
-			level[j].draw()
-			if (level.at(j+1)) {
-				level[j].draw_line_to(level[j + 1])
+// ==================== Drawing Helpers ====================
+function drawConstruction(levels) {
+	for (let i = 0; i < levels.length; i++) {
+		const level = levels[i];
+		for (let j = 0; j < level.length; j++) {
+			// Draw control points (level 0) in green, except hovered one in red
+			if (i === 0) {
+				const isHovered = mouse && mouse.index === j;
+				level[j].draw(isHovered ? 12 : 8, isHovered ? "red" : "#00FF00");
+			}
+			// Draw lines between consecutive points in this level
+			if (j < level.length - 1) {
+				level[j].draw_line_to(level[j + 1], 2, "#FFFFFF");
 			}
 		}
 	}
+}
 
+function drawCurveStrip(points, color = "red", width = 2) {
+	for (let i = 0; i < points.length - 1; i++) {
+		points[i].draw_line_to(points[i + 1], width, color);
+	}
+}
 
+// ==================== Main Animation Loop ====================
+function mainLoop() {
+	clearBackground();
+	
+	// Get all de Casteljau levels for current dt
+	const levels = deCasteljauLevels(start_points, dt);
+	
+	// Draw construction lines and control points
+	drawConstruction(levels);
+	
+	// If animation not finished, increment dt and store new curve point
 	if (dt < 1) {
-		dt += DDT
-		points.push(alp.at(-1).at(-1))
-	}
-	linestrip(points,2,"red")
-
-
-
-	if (move_point) {
-		const sp = start_points[target_point]
-		switch (move_point.direction) {
-			case 0:
-				sp.y += point_move_speed
-				break;
-			case 1: 
-				sp.x -= point_move_speed
-				break;
-			case 2: 
-				sp.x += point_move_speed
-				break;
-			case 3:
-				sp.y -= point_move_speed
-				break;
-			default:
-				throw "unexpected direction"
-				break;
+		dt = Math.min(dt + DT_STEP, 1); // clamp to 1
+		const lastLevel = levels[levels.length - 1];
+		if (lastLevel.length === 1) {
+			curvePoints.push(lastLevel[0]); // the point on the curve
 		}
-		resume_draw()
 	}
-
-	setTimeout(main_loop,1000/FPS)
-}
-main_loop()
-
-function resume_draw() {
-	clear_background()
-
-	const new_points = []
-	for (t = 0; t <dt; t+=DDT) {
-		const alp = all_levels_points(start_points,t)
-		const level_one = alp[0] 
-		for (let i = 0;i < level_one.length;i++) {
-			level_one[i].draw()
-		}
-		const p = alp.at(-1).at(-1)
-		new_points.push(p)
+	
+	// Draw accumulated curve in red
+	drawCurveStrip(curvePoints, "red", 3);
+	
+	// Handle dragging: if mouse down and hovering, update control point
+	if (mouseDown && mouse) {
+		start_points[mouse.index] = mouse.worldPos;
 	}
-	points = new_points
-	linestrip(points,2,"red")
-
+	
+	setTimeout(mainLoop, 1000 / FPS);
 }
+mainLoop();
 
-REPLAY.addEventListener("click",() => {
-	dt = 0
-	points = []
-})
-
-let target_point = 0
-
-for (let i = 0; i < start_points.length; i++) {
-	const button = document.getElementById(`D${i}`)
-	button.addEventListener("mousedown",() => {
-		move_point = {
-			direction : i,
-		}
-	})
-	button.addEventListener("mouseup",() => {
-		move_point = null
-	})
-}
-
-function point_id(i) {
-	return `POINT_${i}_ID`
-}
-
-function reset_points_options() {
-	const options = []
-	for (let i = 0; i< start_points.length;i++) {
-		options.push(`<option id="${point_id(i)}" value="${i}">${i + 1}</option>`)
-	}
-	SELECTOR.innerHTML = options.join("") 
-
-	for (let i = 0; i< start_points.length;i++) {
-		const el = document.getElementById(point_id(i))
-		el.addEventListener("click",() => {
-			target_point = i
-		})
-	}
-
-}
-reset_points_options()
-
-
-POP.addEventListener("click",() => {
-	start_points.pop()
-	reset_points_options()
-})
+// ==================== Button Controls ====================
+document.getElementById("REPLAY").addEventListener("click", () => {
+	dt = 0;
+	curvePoints = [];
+});
+	
+document.getElementById("POP").addEventListener("click", () => {
+	start_points.pop();
+});
