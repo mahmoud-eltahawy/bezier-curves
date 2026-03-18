@@ -1,17 +1,15 @@
-// ==================== Configuration ====================
 const FPS = 30;
-const DT_STEP = 0.01; // how much 't' increases per frame
+const DT_STEP = 0.01;
 const config = {
 scale_x: 10,
 scale_y: 10,
 };
 
-// ==================== Canvas Setup ====================
 const canvas = document.getElementById("box");
 const ctx = canvas.getContext("2d");
 
 function box_size() {
-return Math.min(window.innerWidth, window.innerHeight) - 50; // margin
+	return Math.min(window.innerWidth, window.innerHeight) - 50;
 }
 
 function resizeCanvas() {
@@ -24,8 +22,8 @@ window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function clearBackground() {
-ctx.fillStyle = "#000000";
-ctx.fillRect(0, 0, canvas.width, canvas.height);
+	ctx.fillStyle = "#000000";
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 // ==================== Mouse Interaction ====================
@@ -33,25 +31,25 @@ let mouse = undefined;           // { point: Vec2, index: number } of hovered co
 let mouseDown = false;
 
 canvas.addEventListener("mousedown", () => {
-mouseDown = true;
+		mouseDown = true;
 });
 canvas.addEventListener("mouseup", () => {
-mouseDown = false;
+	mouseDown = false;
 });
+
 canvas.addEventListener("mousemove", (e) => {
-const rect = canvas.getBoundingClientRect();
-const canvasX = e.clientX - rect.left;
-const canvasY = e.clientY - rect.top; // fixed: was 'rect.right'
+	const rect = canvas.getBoundingClientRect();
+	const canvasX = e.clientX - rect.left;
+	const canvasY = e.clientY - rect.top;
 
-const worldPos = Vec2.fromCanvas({ x: canvasX, y: canvasY });
+	const worldPos = Vec2.fromCanvas({ x: canvasX, y: canvasY });
 
-// Find control point within 0.4 world units
-const hovered = start_points
-.map((pt, idx) => ({ point: pt, index: idx }))
-.filter(item => worldPos.distance_to(item.point) < 0.4)
-.at(0);
+	const hovered = start_points
+		.map((pt, idx) => ({ point: pt, index: idx }))
+		.filter(item => worldPos.distance_to(item.point) < 0.4)
+		.at(0);
 
-mouse = hovered ? { ...hovered, worldPos } : undefined;
+	mouse = hovered ? { ...hovered, worldPos } : undefined;
 });
 
 // ==================== Control Points & State ====================
@@ -106,17 +104,11 @@ function drawCurveStrip(points, color = "red", width = 2) {
 	}
 }
 
-// ==================== Main Animation Loop ====================
 function mainLoop() {
 	clearBackground();
-	
-	// Get all de Casteljau levels for current dt
 	const levels = deCasteljauLevels(start_points, dt);
-	
-	// Draw construction lines and control points
 	drawConstruction(levels);
 	
-	// If animation not finished, increment dt and store new curve point
 	if (dt < 1) {
 		dt = Math.min(dt + DT_STEP, 1); // clamp to 1
 		const lastLevel = levels[levels.length - 1];
@@ -125,19 +117,18 @@ function mainLoop() {
 		}
 	}
 	
-	// Draw accumulated curve in red
 	drawCurveStrip(curvePoints, "red", 3);
 	
-	// Handle dragging: if mouse down and hovering, update control point
 	if (mouseDown && mouse) {
 		start_points[mouse.index] = mouse.worldPos;
+	  dt = 0;
+	  curvePoints = [];
 	}
 	
 	setTimeout(mainLoop, 1000 / FPS);
 }
 mainLoop();
 
-// ==================== Button Controls ====================
 document.getElementById("REPLAY").addEventListener("click", () => {
 	dt = 0;
 	curvePoints = [];

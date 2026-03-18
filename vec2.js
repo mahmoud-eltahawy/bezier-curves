@@ -1,13 +1,6 @@
-function box_size() {
-    return Math.min(
-	    window.innerWidth,
-	    window.innerHeight
-    ) - 10
-}
-
 class Vec2 {
 	constructor({ x, y }) {
-		this.x = x; // world coordinate
+		this.x = x;
 		this.y = y;
 	}
 
@@ -15,7 +8,7 @@ class Vec2 {
 		const half = box_size() / 2;
 		return {
 			x: half * (1 + this.x / config.scale_x),
-			y: half * (1 - this.y / config.scale_y), // canvas Y increases downward
+			y: half * (1 - this.y / config.scale_y),
 		};
 	}
 
@@ -23,7 +16,7 @@ class Vec2 {
 		const half = box_size() / 2;
 		return new Vec2({
 			x: (x / half - 1) * config.scale_x,
-			y: (1 - y / half) * config.scale_y, // corrected formula
+			y: (1 - y / half) * config.scale_y,
 		});
 	}
 
@@ -40,7 +33,6 @@ class Vec2 {
 		});
 	}
 	
-	// Drawing methods (canvas context is global 'ctx')
 	draw(size = 10, color = "#00FF00") {
 		const { x, y } = this.normalized();
 		ctx.fillStyle = color;
