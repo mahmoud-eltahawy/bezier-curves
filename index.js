@@ -1,3 +1,8 @@
+
+function lerp(a,b,t) {
+  return a + (b - a) * t
+}
+
 class Vec2 {
   constructor({ x, y }) {
     this.x = x;
@@ -26,8 +31,8 @@ class Vec2 {
 
   lerp(other, t) {
     return new Vec2({
-      x: this.x + (other.x - this.x) * t,
-      y: this.y + (other.y - this.y) * t,
+      x: lerp(this.x,other.x,t),
+      y: lerp(this.y,other.y,t),
     });
   }
 
@@ -55,17 +60,17 @@ const config = {
   scale_y: 10,
 };
 
-const canvas = document.getElementById("box");
-const ctx = canvas.getContext("2d");
+const ctx = box.getContext("2d");
 
 function box_size() {
-  return Math.min(window.innerWidth, window.innerHeight) - 50;
+  const margin = 50
+  return Math.min(window.innerWidth, window.innerHeight) - margin;
 }
 
 function resizeCanvas() {
   const size = box_size();
-  canvas.width = size;
-  canvas.height = size;
+  box.width = size;
+  box.height = size;
   clearBackground();
 }
 window.addEventListener("resize", resizeCanvas);
@@ -73,16 +78,16 @@ resizeCanvas();
 
 function clearBackground() {
   ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, box.width, box.height);
 }
 
 let hoveredPoint = undefined;
 let mouseDown = false;
 
-canvas.addEventListener("mousedown", () => (mouseDown = true));
-canvas.addEventListener("mouseup", () => (mouseDown = false));
-canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
+box.addEventListener("mousedown", () => (mouseDown = true));
+box.addEventListener("mouseup", () => (mouseDown = false));
+box.addEventListener("mousemove", (e) => {
+  const rect = box.getBoundingClientRect();
   const canvasX = e.clientX - rect.left;
   const canvasY = e.clientY - rect.top;
 
@@ -128,7 +133,7 @@ function drawConstruction(levels) {
     for (let j = 0; j < level.length; j++) {
       if (i === 0) {
         const isHovered = hoveredPoint && hoveredPoint.index === j;
-        level[j].draw(isHovered ? 12 : 8, isHovered ? "red" : "#00FF00");
+        level[j].draw(isHovered ? 12 : 8, isHovered ? "red" : "#11FF11");
       }
       if (j < level.length - 1) {
         level[j].draw_line_to(level[j + 1], 2, "#FFFFFF");
