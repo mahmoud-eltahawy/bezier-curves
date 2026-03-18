@@ -106,34 +106,47 @@ function drawCurveStrip(points, color = "red", width = 2) {
 
 function mainLoop() {
 	clearBackground();
-	const levels = deCasteljauLevels(start_points, dt);
-	drawConstruction(levels);
+
+	if (start_points.length > 0) {
+		const levels = deCasteljauLevels(start_points, dt);
+		drawConstruction(levels);
 	
-	if (dt < 1) {
-		dt = Math.min(dt + DT_STEP, 1); // clamp to 1
-		const lastLevel = levels[levels.length - 1];
-		if (lastLevel.length === 1) {
-			curvePoints.push(lastLevel[0]); // the point on the curve
+		if (dt < 1) {
+			dt = Math.min(dt + DT_STEP, 1); // clamp to 1
+			const lastLevel = levels[levels.length - 1];
+			if (lastLevel.length === 1) {
+				curvePoints.push(lastLevel[0]); // the point on the curve
+			}
 		}
-	}
 	
-	drawCurveStrip(curvePoints, "red", 3);
+		drawCurveStrip(curvePoints, "red", 3);
 	
-	if (mouseDown && mouse) {
-		start_points[mouse.index] = mouse.worldPos;
-	  dt = 0;
-	  curvePoints = [];
+		if (mouseDown && mouse) {
+			start_points[mouse.index] = mouse.worldPos;
+		  dt = 0;
+		  curvePoints = [];
+		}
 	}
 	
 	setTimeout(mainLoop, 1000 / FPS);
 }
 mainLoop();
 
-document.getElementById("REPLAY").addEventListener("click", () => {
+function replay() {
 	dt = 0;
 	curvePoints = [];
-});
+}
+
+REPLAY.addEventListener("click", replay);
 	
-document.getElementById("POP").addEventListener("click", () => {
-	start_points.pop();
+POP.addEventListener("click", () => {
+	if (start_points.length > 0) {
+		start_points.pop();
+		replay()
+	}
+});
+
+PUSH.addEventListener("click", () => {
+  start_points.push(new Vec2({ x: 0, y: 0 }));
+	replay()
 });
