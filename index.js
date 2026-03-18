@@ -1,152 +1,207 @@
-const FPS = 30;
-const DT_STEP = 0.01;
+class Vec2 {
+  constructor({ x, y }) {
+    this.x = x;
+    this.y = y;
+  }
+
+  normalized() {
+    const half = box_size() / 2;
+    return {
+      x: half * (1 + this.x / config.scale_x),
+      y: half * (1 - this.y / config.scale_y),
+    };
+  }
+
+  static fromCanvas({ x, y }) {
+    const half = box_size() / 2;
+    return new Vec2({
+      x: (x / half - 1) * config.scale_x,
+      y: (1 - y / half) * config.scale_y,
+    });
+  }
+
+  distance_to(other) {
+    return Math.hypot(this.x - other.x, this.y - other.y);
+  }
+
+  lerp(other, t) {
+    return new Vec2({
+      x: this.x + (other.x - this.x) * t,
+      y: this.y + (other.y - this.y) * t,
+    });
+  }
+
+  draw(size = 10, color = "#00FF00") {
+    const { x, y } = this.normalized();
+    ctx.fillStyle = color;
+    ctx.fillRect(x - size / 2, y - size / 2, size, size);
+  }
+
+  draw_line_to(other, width = 2, color = "#FFFFFF") {
+    const from = this.normalized();
+    const to = other.normalized();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  }
+}
+
+const ANIMATION_DURATION = 3000;
 const config = {
-scale_x: 10,
-scale_y: 10,
+  scale_x: 10,
+  scale_y: 10,
 };
 
 const canvas = document.getElementById("box");
 const ctx = canvas.getContext("2d");
 
 function box_size() {
-	return Math.min(window.innerWidth, window.innerHeight) - 50;
+  return Math.min(window.innerWidth, window.innerHeight) - 50;
 }
 
 function resizeCanvas() {
-const size = box_size();
-canvas.width = size;
-canvas.height = size;
-clearBackground();
+  const size = box_size();
+  canvas.width = size;
+  canvas.height = size;
+  clearBackground();
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function clearBackground() {
-	ctx.fillStyle = "#000000";
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-// ==================== Mouse Interaction ====================
-let mouse = undefined;           // { point: Vec2, index: number } of hovered control point
+let hoveredPoint = undefined;
 let mouseDown = false;
 
-canvas.addEventListener("mousedown", () => {
-		mouseDown = true;
-});
-canvas.addEventListener("mouseup", () => {
-	mouseDown = false;
-});
-
+canvas.addEventListener("mousedown", () => (mouseDown = true));
+canvas.addEventListener("mouseup", () => (mouseDown = false));
 canvas.addEventListener("mousemove", (e) => {
-	const rect = canvas.getBoundingClientRect();
-	const canvasX = e.clientX - rect.left;
-	const canvasY = e.clientY - rect.top;
+  const rect = canvas.getBoundingClientRect();
+  const canvasX = e.clientX - rect.left;
+  const canvasY = e.clientY - rect.top;
 
-	const worldPos = Vec2.fromCanvas({ x: canvasX, y: canvasY });
+  const worldPos = Vec2.fromCanvas({ x: canvasX, y: canvasY });
 
-	const hovered = start_points
-		.map((pt, idx) => ({ point: pt, index: idx }))
-		.filter(item => worldPos.distance_to(item.point) < 0.4)
-		.at(0);
+  const hovered = controlPoints
+    .map((pt, idx) => ({ point: pt, index: idx }))
+    .filter((item) => worldPos.distance_to(item.point) < 0.4)
+    .at(0);
 
-	mouse = hovered ? { ...hovered, worldPos } : undefined;
+  hoveredPoint = hovered ? { index: hovered.index, worldPos } : undefined;
 });
 
-// ==================== Control Points & State ====================
-const HALF_SPAN = 8;
-let start_points = [
-new Vec2({ x: -HALF_SPAN, y:  HALF_SPAN }),
-new Vec2({ x: -HALF_SPAN, y: -HALF_SPAN }),
-new Vec2({ x:  HALF_SPAN, y: -HALF_SPAN }),
-new Vec2({ x:  HALF_SPAN, y:  HALF_SPAN }),
+const DEFAULT_POINTS = [
+  new Vec2({ x: -8, y: 8 }),
+  new Vec2({ x: -8, y: -8 }),
+  new Vec2({ x: 8, y: -8 }),
+  new Vec2({ x: 8, y: 8 }),
 ];
 
-let dt = 0;                       // current interpolation parameter [0,1]
-let curvePoints = [];             // accumulated curve points (red line)
+let controlPoints = [...DEFAULT_POINTS];
+let t = 0;
+let curvePoints = [];
+let animationStart = performance.now();
 
-// ==================== De Casteljau ====================
-// Returns an array of levels: [level0, level1, ..., lastLevel]
-function deCasteljauLevels(points, t, levels = []) {
-	if (points.length === 0) return levels;
-	if (levels.length === 0) levels.push(points); // store original as level 0
-	
-	if (points.length === 1) return levels; // reached the curve point
-	
-	const nextLevel = [];
-	for (let i = 0; i < points.length - 1; i++) {
-		nextLevel.push(points[i].lerp(points[i + 1], t));
-	}
-	levels.push(nextLevel);
-	return deCasteljauLevels(nextLevel, t, levels);
+function deCasteljauLevels(points, tVal, levels = []) {
+  if (points.length === 0) return levels;
+  if (levels.length === 0) levels.push(points);
+
+  if (points.length === 1) return levels;
+
+  const nextLevel = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    nextLevel.push(points[i].lerp(points[i + 1], tVal));
+  }
+  levels.push(nextLevel);
+  return deCasteljauLevels(nextLevel, tVal, levels);
 }
 
-// ==================== Drawing Helpers ====================
 function drawConstruction(levels) {
-	for (let i = 0; i < levels.length; i++) {
-		const level = levels[i];
-		for (let j = 0; j < level.length; j++) {
-			// Draw control points (level 0) in green, except hovered one in red
-			if (i === 0) {
-				const isHovered = mouse && mouse.index === j;
-				level[j].draw(isHovered ? 12 : 8, isHovered ? "red" : "#00FF00");
-			}
-			// Draw lines between consecutive points in this level
-			if (j < level.length - 1) {
-				level[j].draw_line_to(level[j + 1], 2, "#FFFFFF");
-			}
-		}
-	}
+  for (let i = 0; i < levels.length; i++) {
+    const level = levels[i];
+    for (let j = 0; j < level.length; j++) {
+      if (i === 0) {
+        const isHovered = hoveredPoint && hoveredPoint.index === j;
+        level[j].draw(isHovered ? 12 : 8, isHovered ? "red" : "#00FF00");
+      }
+      if (j < level.length - 1) {
+        level[j].draw_line_to(level[j + 1], 2, "#FFFFFF");
+      }
+    }
+  }
 }
 
 function drawCurveStrip(points, color = "red", width = 2) {
-	for (let i = 0; i < points.length - 1; i++) {
-		points[i].draw_line_to(points[i + 1], width, color);
-	}
+  for (let i = 0; i < points.length - 1; i++) {
+    points[i].draw_line_to(points[i + 1], width, color);
+  }
+}
+
+function updateTByTime() {
+  const now = performance.now();
+  const elapsed = now - animationStart;
+  t = Math.min(elapsed / ANIMATION_DURATION, 1);
 }
 
 function mainLoop() {
-	clearBackground();
+  clearBackground();
 
-	if (start_points.length > 0) {
-		const levels = deCasteljauLevels(start_points, dt);
-		drawConstruction(levels);
-	
-		if (dt < 1) {
-			dt = Math.min(dt + DT_STEP, 1); // clamp to 1
-			const lastLevel = levels[levels.length - 1];
-			if (lastLevel.length === 1) {
-				curvePoints.push(lastLevel[0]); // the point on the curve
-			}
-		}
-	
-		drawCurveStrip(curvePoints, "red", 3);
-	
-		if (mouseDown && mouse) {
-			start_points[mouse.index] = mouse.worldPos;
-		  dt = 0;
-		  curvePoints = [];
-		}
-	}
-	
-	setTimeout(mainLoop, 1000 / FPS);
+  if (mouseDown && hoveredPoint) {
+    controlPoints[hoveredPoint.index] = hoveredPoint.worldPos;
+    t = 0;
+    curvePoints = [];
+    animationStart = performance.now();
+  }
+
+  if (controlPoints.length > 0) {
+    if (t < 1) updateTByTime();
+
+    const levels = deCasteljauLevels(controlPoints, t);
+
+    drawConstruction(levels);
+
+    if (t < 1 || curvePoints.length === 0) {
+      const lastLevel = levels[levels.length - 1];
+      if (lastLevel && lastLevel.length === 1) {
+        curvePoints.push(lastLevel[0]);
+      }
+    }
+
+    drawCurveStrip(curvePoints, "red", 3);
+  }
+
+  requestAnimationFrame(mainLoop);
 }
-mainLoop();
+requestAnimationFrame(mainLoop);
 
-function replay() {
-	dt = 0;
-	curvePoints = [];
+function restartAnimation() {
+  t = 0;
+  curvePoints = [];
+  animationStart = performance.now();
+  hoveredPoint = undefined;
 }
 
-REPLAY.addEventListener("click", replay);
-	
+REPLAY.addEventListener("click", restartAnimation);
+
 POP.addEventListener("click", () => {
-	if (start_points.length > 0) {
-		start_points.pop();
-		replay()
-	}
+  if (controlPoints.length > 0) {
+    controlPoints.pop();
+    restartAnimation();
+  }
 });
 
 PUSH.addEventListener("click", () => {
-  start_points.push(new Vec2({ x: 0, y: 0 }));
-	replay()
+  controlPoints.push(new Vec2({ x: 0, y: 0 }));
+  restartAnimation();
+});
+
+RESET.addEventListener("click", () => {
+  controlPoints = DEFAULT_POINTS.map((p) => new Vec2({ x: p.x, y: p.y }));
+  restartAnimation();
 });
